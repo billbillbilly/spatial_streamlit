@@ -4,3 +4,5 @@ langchain_community == 0.2.16
 
 geopandas
 rasterio
+segment-geospatial
+pillow
