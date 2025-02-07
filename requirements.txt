@@ -1,8 +1,6 @@
 streamlit
-langchain == 0.2.16
-langchain_community == 0.2.16
+ollama
 
 geopandas
 rasterio
-segment-geospatial
 pillow
