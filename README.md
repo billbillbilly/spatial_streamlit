@@ -1,5 +1,9 @@
-## Set up
-``` sh
+## Build
+Please make sure conda and Ollama python is installed
+
+```sh
+conda create -n llmApp python==3.10
+conda activate llmApp
 pip install -r requirements.txt 
 ```
 
