@@ -1,3 +1,6 @@
+## Note
+Only Tag WIP1 works
+
 ## Build
 Please make sure conda and Ollama python is installed
 

@@ -3,6 +3,10 @@ import streamlit as st
 from PIL import Image
 import ollama
 
+import os
+import zipfile
+import tempfile
+import leafmap.foliumap as leafmap
 import rasterio
 import geopandas as gpd
 # from samgeo import tms_to_geotiff
@@ -57,18 +61,63 @@ class processData:
                 }]
             )
             return res['message']['content']
-                
+
+def loadSHP (uploaded_file):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Save the uploaded ZIP file in the temporary directory
+        zip_path = os.path.join(tmp_dir, "uploaded_shapefile.zip")
+        with open(zip_path, "wb") as f:
+            f.write(uploaded_file.read())
+
+        # Extract the ZIP file
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(tmp_dir)
+
+        # Find the .shp file in the extracted files
+        shp_file = None
+        for root, dirs, files in os.walk(tmp_dir):
+            # Skip __MACOSX and hidden files
+            if "__MACOSX" in root:
+                continue
+
+            for file in files:
+                if file.startswith("._"):  # Skip macOS metadata files
+                    continue
+
+                if file.endswith(".shp"):
+                    shp_file = os.path.join(root, file)
+                    break
+
+        # Read the Shapefile using GeoPandas
+        if shp_file:
+            try: 
+                displaySHP(shp_file)
+            except Exception as e:
+                st.error(f"Error reading Shapefile: {e}")
+
+def displaySHP(data):
+    # Display map in Streamlit
+    m = leafmap.Map()
+    m.add_shp(data, layer_name="parcels")
+    m.to_streamlit(height=400)
+
 #--------------- User Interface & functions ----------------
 
 image_ = None
+parcels_ = None
 uploadingCol, displayCol = st.columns(2)
 # buttons for uploading files
 with uploadingCol:
-    parcel_uploader = st.file_uploader("Upload parcel data", type=["zip"])
+    parcel_uploader = st.file_uploader("Upload parcel data [.zip]", 
+                                       type=["zip"], 
+                                       label_visibility="hidden",
+                                       help="Upload a ZIP file containing .shp, .shx, .dbf, and other necessary files")
     if parcel_uploader:
-        st.write(f"You uploaded {parcel_uploader.name}")
+        if parcel_uploader is not None:
+            #parcels_ = loadSHP(parcel_uploader)
+            st.write(f"You uploaded {parcel_uploader.name}")
     building_uploader = st.file_uploader("Upload building footprints data", type=["zip"])
-    if parcel_uploader:
+    if building_uploader:
         st.write(f"You uploaded {building_uploader.name}")
     img_uploader = st.file_uploader("Upload image data", type=["png", "jpg", "jpeg", "tif"])
     if img_uploader:
@@ -81,14 +130,27 @@ with displayCol:
         if image_:
             st.image(image_, caption="input image")
     elif display_ == "show parcels":
-        st.write(f"You uploaded pacels")
+        if parcel_uploader:
+            loadSHP(parcel_uploader)
     elif display_ == "show buildings":
         st.write(f"You uploaded buildings")
 
 # interactive map
 mapView = st.toggle("get image on map")
+bbox_ = None
 if mapView:
-    st.write('res')
+    m = leafmap.Map(minimap_control=True)
+    m.add_basemap("SATELLITE")
+    m.to_streamlit(height=500)
+    # buttons for clip map
+    clip_map = st.button("clip map with the polygon", 
+                         key="button_clip", 
+                         help="click to clip map with polygon", 
+                         type='secondary', 
+                         disabled=False)
+    if clip_map:
+        bbox_ = m.user_roi_bounds()
+        st.write(f'{bbox_}')
 
 # parameters
 para1, para2, para3 = st.columns(3)

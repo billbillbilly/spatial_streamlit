@@ -1,6 +1,7 @@
 streamlit
 ollama
 
+leafmap
 geopandas
 rasterio
 pillow
