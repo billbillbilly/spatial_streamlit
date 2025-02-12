@@ -193,7 +193,7 @@ with text2:
     prompt = st.text_area("Enter your prompt:")
 
 # tabs
-tab_single_img_upload, tab_parcel_upload = st.tabs(["Single Image", "Parcel/Block(shp file)"])
+tab_single_img_upload, tab_parcel_upload, tab_streetview = st.tabs(["Single Image", "Parcel/Block(shp file)", "Street View"])
 
 with tab_single_img_upload:
     # buttons for uploading files
@@ -212,6 +212,11 @@ with tab_parcel_upload:
         if parcel_uploader:
             parcels_ = loadSHP(parcel_uploader)
             st.dataframe(parcels_)
+
+with tab_streetview:
+    # Embed the entire Mapillary web app
+    mapillary_url = "https://www.mapillary.com/app/?lat=20&lng=0&z=2"
+    st.components.v1.iframe(mapillary_url)
 
 # buttons for sending prompts/running model
 with tab_single_img_upload:
