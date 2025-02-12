@@ -1,6 +1,8 @@
 streamlit
+streamlit_folium
 ollama
 
 geopandas
 rasterio
 pillow
+segment-geospatial
