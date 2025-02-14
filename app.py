@@ -14,6 +14,7 @@ from rasterio.mask import mask
 import geopandas as gpd
 import pandas as pd
 from samgeo import tms_to_geotiff
+import pyautogui
 
 st.header('🎈 Streamlit App for Spatial Data Analysis')
 
@@ -165,6 +166,26 @@ def loadSHP(file):
         else:
             st.error("No valid .shp file found in the uploaded ZIP.") 
 
+# extract streetview key
+def extract_imgkey(link):
+    # extract key from the link
+    key = link.split("pKey=")[1].split("&")[0]
+    return key
+
+# Function to take a screenshot
+def capture_screenshot():
+    screen_width, screen_height = pyautogui.size()
+    screenshot = pyautogui.screenshot()  # Takes a full screenshot
+    screenshot_path = "mapillary_screenshot.png"
+    # Crop the screenshot based on screen_width and screen_height 
+    cropped_image = screenshot.crop((int(screen_width*0.3),     # left
+                                     int(screen_height*0.3),    # top
+                                     int(screen_width*0.7),     # right
+                                     int(screen_height*0.9)))   # bottom
+    cropped_image.save(screenshot_path)
+    # screenshot.save(screenshot_path)
+    return screenshot_path
+
 @st.cache_data
 def convert_df(data):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
@@ -192,8 +213,8 @@ with text1:
 with text2:
     prompt = st.text_area("Enter your prompt:")
 
-# tabs
-tab_single_img_upload, tab_parcel_upload, tab_streetview = st.tabs(["Single Image", "Parcel/Block(shp file)", "Street View"])
+#------------------ tabs ------------------
+tab_single_img_upload, tab_parcel_upload, tab_streetview = st.tabs(["Single Image", "Parcel/Block(shp file)", "Single Street View"])
 
 with tab_single_img_upload:
     # buttons for uploading files
@@ -214,9 +235,33 @@ with tab_parcel_upload:
             st.dataframe(parcels_)
 
 with tab_streetview:
+    # text input for street view link
+    sv_link = st.text_input("street view link", "https://www.mapillary.com/app/?pKey=763349552242642&focus=photo")
+    # extract key from the link
+    img_key = extract_imgkey(sv_link)
+    if img_key:
+        st.write(f"Crrent Street View Image Key: {img_key}")
+    # check box for street view
+    mapillary_styles = {
+        "Photo": "photo",
+        "Split": "split",
+        "Classic": "classic",
+    }
+    selected_style = st.selectbox("select Mapillary Style", list(mapillary_styles.keys()))
     # Embed the entire Mapillary web app
-    mapillary_url = "https://www.mapillary.com/app/?lat=20&lng=0&z=2"
-    st.components.v1.iframe(mapillary_url)
+    # Mapillary embed URL
+    mapillary_embed_html = f"""
+    <iframe 
+        id="mapillarySection"
+        width="100%" height="500" 
+        src="https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key={img_key}&x=0.5&y=0.5&style={mapillary_styles[selected_style]}"
+        frameborder="0">
+    </iframe>
+    """
+    # Embed
+    st.components.v1.html(mapillary_embed_html, height=500)
+
+#----------------- process data -----------------
 
 # buttons for sending prompts/running model
 with tab_single_img_upload:
@@ -267,3 +312,32 @@ with tab_parcel_upload:
         #         popup=row['response']
         #     ).add_to(m)
         # st_folium(m)
+with tab_streetview:
+    btn_send = st.button("process street view", 
+                         key="button_send_steetview",  
+                         type='secondary', disabled=False)
+    if btn_send:
+        st.components.v1.html(
+            """
+            <script>
+            function scrollToIframe() {
+                document.getElementById("mapillarySection").scrollIntoView({ behavior: 'smooth' });
+            }
+            scrollToIframe();
+            </script>
+            """,
+            height=0,
+        )
+        screenshot_path = capture_screenshot()
+        if screenshot_path:
+            inputData = processData(image=screenshot_path)
+            if inputData != None:
+                sys_ = """
+                Pretent there is only the street view image.
+                you should only look at and talk about the built/natual environments 
+                in the street view. You need to ignore and not talk about the user interface elements 
+                (such as the mapillary logo and a green "Contribute Images" button)
+                in streey view image
+                """ + system_info
+                res = inputData.oneImgChat(system=sys_, prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
+                st.write(res)

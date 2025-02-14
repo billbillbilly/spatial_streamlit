@@ -6,3 +6,4 @@ geopandas
 rasterio
 pillow
 segment-geospatial
+pyautogui
