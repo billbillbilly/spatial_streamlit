@@ -27,26 +27,26 @@ st.header('🎈 Streamlit App for Spatial Data Analysis')
 #--------------- Methods ---------------
 
 class processData:
-    def __init__(self, image=None, images=None, parcels=None, api_key=None):
+    def __init__(self, image=None, images=None, parcels=None):
         self.img = image
         self.imgs = images
         self.parcels = parcels
-        self.key = api_key
 
-    def loadParcelsAndMap(self, parcels=None, map=None, bbox=None):
-        if parcels != None:
-            # import shp data
-            self.parcels = parcels
-            # import map
-            if map != None:
-                m = rasterio.open(map)
-            if bbox != None:
-                m = rasterio.open(self.getMap(bbox))
+    # def loadParcelsAndMap(self, parcels=None, map=None, bbox=None):
+    #     if parcels != None:
+    #         # import shp data
+    #         self.parcels = parcels
+    #         # import map
+    #         if map != None:
+    #             m = rasterio.open(map)
+    #         if bbox != None:
+    #             m = rasterio.open(self.getMap(bbox))
     
-    def getSV(self, centroid, epsg):
+    def getSV(self, centroid, epsg, key):
         bbox = self.projection(centroid, epsg)
-        url = f"https://graph.mapillary.com/images?access_token={self.key}&fields=id,compass_angle,thumb_1024_url,geometry&bbox={bbox}&is_pano=true"
+        url = f"https://graph.mapillary.com/images?access_token={key}&fields=id,compass_angle,thumb_1024_url,geometry&bbox={bbox}&is_pano=true"
         response = requests.get(url).json()
+
         # find the closest image
         response = self.closest(centroid, response)
         # Extract Image ID, Compass Angle, image url, and coordinates
@@ -71,18 +71,19 @@ class processData:
         left = max(0, center_x - crop_width // 2)
         right = min(width, center_x + crop_width // 2)
         cropped_image = image.crop((left, 0, right, height))
-        return cropped_image
+        cropped_image.save("cropped_sv.jpg", format="JPEG")
+        print('street view downloaded')
+        return "cropped_sv.jpg"
     
     def projection(self, centroid, epsg):
         x, y = self.degree2dis(centroid, epsg)
-        
         # Get unit name (meters, degrees, etc.)
         crs = CRS.from_epsg(epsg)
         unit_name = crs.axis_info[0].unit_name
         # set search distance to 25 meters
-        r = 25
+        r = 50
         if unit_name == 'foot':
-            r = 82.021
+            r = 164.042
         elif unit_name == 'degree':
             print("Error: epsg must be projected system.")
             sys.exit(1)
@@ -119,7 +120,7 @@ class processData:
         id = id_array[ind][0]
         return res_df.loc[res_df['id'] == id]
     
-    def calculate_bearing(lat1, lon1, lat2, lon2):
+    def calculate_bearing(self, lat1, lon1, lat2, lon2):
         lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
         delta_lon = lon2 - lon1
 
@@ -130,15 +131,15 @@ class processData:
         return (bearing + 360) % 360  # Normalize to 0-360
     
     def oneImgChat(self, system=None, prompt=None, temp=None, top_k=None, top_p=None):
-        return self.LLM_chat(system=system, prompt=prompt, img=self.img, 
+        return self.LLM_chat(system=system, prompt=prompt, img=[self.img], 
                              temp=temp, top_k=top_k, top_p=top_p)
     
     def loopImgChat(self, system=None, prompt=None, temp=None, top_k=None, top_p=None):
         for img in self.imgs:
-            self.LLM_chat(system=system, prompt=prompt, img=img, 
+            self.LLM_chat(system=system, prompt=prompt, img=[img], 
                           temp=temp, top_k=top_k, top_p=top_p)
             
-    def loopParcelChat(self, system=None, prompt=None, temp=None, top_k=None, top_p=None):
+    def loopParcelChat(self, system=None, prompt=None, temp=None, top_k=None, top_p=None, withSV=False, epsg=None, key=None):
         progress_text = "Operation in progress. Please wait."
         progress_bar = st.progress(0, text=progress_text)
         dic = {
@@ -150,6 +151,7 @@ class processData:
         for i in range(len(self.parcels)):
             # Get the extent of one polygon from the filtered GeoDataFrame
             polygon = self.parcels.geometry.iloc[i]
+            centroid = polygon.centroid
             minx, miny, maxx, maxy = polygon.bounds
             bbox = [minx, miny, maxx, maxy]
             # Download data using tms_to_geotiff
@@ -176,9 +178,15 @@ class processData:
             with rasterio.open(clipped_image, "w", **out_meta) as dest:
                 dest.write(out_image)
 
+            # add images
+            input_imgs = [clipped_image]
+
+            if withSV == True and epsg != None and key != None:
+                input_imgs += [self.getSV(centroid, epsg, key)]
+
             res = self.LLM_chat(system=system, 
                                 prompt=prompt, 
-                                img=clipped_image, 
+                                img=input_imgs, 
                                 temp=temp, 
                                 top_k=top_k, 
                                 top_p=top_p)
@@ -195,26 +203,37 @@ class processData:
     
     def LLM_chat(self, system=None, prompt=None, img=None, temp=None, top_k=None, top_p=None):
         if prompt != None and img != None:
-            res = ollama.chat(
-                model='llama3.2-vision',
-                messages=[
-                    {
-                        'role': 'system',
-                        'content': system
-                    },
-                    {
-                        'role': 'user',
-                        'content': prompt,
-                        'images': [img]
-                    }
-                ],
-                options={
-                    "temperature":temp,
-                    "top_k":top_k,
-                    "top_p":top_p
+            if len(img) == 1:
+                return self.chat(system, prompt, img[0], temp, top_k, top_p)
+            elif len(img) == 2:
+                res = ''
+                s = ['satellite', 'street view']
+                for i in range(2):
+                    system = f'You are analyzing {s[i]} image. ' + system
+                    r = self.chat(system, prompt, img[i], temp, top_k, top_p)
+                    res += r + '####################'
+                return res
+    def chat(self, system=None, prompt=None, img=None, temp=None, top_k=None, top_p=None):
+        res = ollama.chat(
+            model='llama3.2-vision',
+            messages=[
+                {
+                    'role': 'system',
+                    'content': system
+                },
+                {
+                    'role': 'user',
+                    'content': prompt,
+                    'images': [img]
                 }
-            )
-            return res['message']['content']
+            ],
+            options={
+                "temperature":temp,
+                "top_k":top_k,
+                "top_p":top_p
+            }
+        )
+        return res['message']['content']
 
 def loadSHP(file):
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -281,9 +300,7 @@ def convert_df(data):
 
 #--------------- User Interface & functions ----------------
 
-parcels_ = None
-image_ = None
-output = None
+parcels_, image_, output, tempr, top_k, top_p, system_info, prompt, sv_key, epsg_input = [None for i in range(10)]
 
 # parameters
 para1, para2, para3 = st.columns(3)
@@ -327,7 +344,14 @@ with tab_parcel_upload:
         st.write(f"You uploaded {parcel_uploader.name}")
         if parcel_uploader:
             parcels_ = loadSHP(parcel_uploader)
-            st.dataframe(parcels_)
+            gdf = parcels_.drop(columns=['geometry'])
+            # Convert datetime columns to strings
+            # for column in gdf.select_dtypes(include=["datetime", "datetime64[ns]"]).columns:
+            #     gdf[column] = gdf[column].astype(str)
+            # # Convert geometry to WKT to avoid Streamlit serialization errors
+            # gdf["geometry"] = gdf["geometry"].apply(lambda geom: geom.wkt)
+
+            st.dataframe(gdf)
 
 with tab_streetview:
     # check box for street view
@@ -357,15 +381,21 @@ with tab_streetview:
         st.write(f"Crrent Street View Image Key: {img_key}")
 
 with tab_parcel_streetview:
-    # text input for street view link
-    sv_key = st.text_input("mapillary key (reqired)👇")
+    para_key, para_epsg = st.columns(2)
+    with para_key:
+        # text input for api key
+        sv_key = st.text_input("api key (reqired)👇")
+    with para_epsg:
+        # enter epsg code
+        epsg_input = st.number_input("epsg", value=None, placeholder="Type a epsg code...", step=1)
+    
     # buttons for uploading files
     parcel_uploader_ = st.file_uploader("Upload parcel data_(required)", type=["zip"])
     if parcel_uploader_:
         st.write(f"You uploaded {parcel_uploader_.name}")
         if parcel_uploader_:
             parcels_ = loadSHP(parcel_uploader_)
-            st.dataframe(parcels_)
+        
 
 #----------------- process data -----------------
 
@@ -380,36 +410,73 @@ with tab_single_img_upload:
         if inputData != None:
             res = inputData.oneImgChat(prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
             st.write(res)
-with tab_parcel_upload:
-    sample_on = st.toggle("randonm sample 2 rows for testing", True)
-    btn1, btn2 = st.columns(2)
-    with btn1:
-        btn_send = st.button("process vector data", 
-                            key="button_load_model", 
-                            help="click to load model for all parcels", 
-                            type='secondary', disabled=False)
 
-    if sample_on:
-        isSample = True
-    else:
-        isSample = False
-    if btn_send:
-        if isSample:
-            random_sample = parcels_.sample(n=2)
-            inputData = processData(parcels=random_sample)
+if parcels_ is not None:
+    with tab_parcel_upload:
+        sample_on = st.toggle("randonm sample 2 rows for testing", True)
+        btn1, btn2 = st.columns(2)
+        with btn1:
+            btn_send = st.button("process vector data", 
+                                key="button_load_model", 
+                                help="click to load model for all parcels", 
+                                type='secondary', disabled=False)
+        if sample_on:
+            isSample = True
         else:
-            inputData = processData(parcels=parcels_)
-        if inputData != None:
-            res = inputData.loopParcelChat(prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
-            # convert to dataframe
-            output = pd.DataFrame(res)
+            isSample = False
+        if btn_send:
+            if isSample:
+                random_sample = parcels_.sample(n=2)
+                inputData = processData(parcels=random_sample)
+            else:
+                inputData = processData(parcels=parcels_)
+            if inputData != None:
+                res = inputData.loopParcelChat(prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
+                # convert to dataframe
+                output = pd.DataFrame(res)
 
-    if output is not None:
-        st.dataframe(output)
-        csv = convert_df(output)
-        # download the result as csv
-        with btn2:
-            st.download_button(label="Download result as CSV", data=csv, file_name="output.csv", mime="text/csv")
+        if output is not None:
+            st.dataframe(output)
+            csv = convert_df(output)
+            # download the result as csv
+            with btn2:
+                st.download_button(label="Download result as CSV", data=csv, file_name="output.csv", mime="text/csv")
+
+    with tab_parcel_streetview:
+        sample_on = st.toggle("randonmly sample 2 rows for testing", True)
+        btn1, btn2 = st.columns(2)
+        with btn1:
+            btn_send = st.button("process data", 
+                                key="button_load_model_", 
+                                help="click to load model for all parcels", 
+                                type='secondary', disabled=False)
+        if sample_on:
+            isSample = True
+        else:
+            isSample = False
+        if btn_send:
+            if isSample:
+                random_sample = parcels_.sample(n=2)
+                inputData = processData(parcels=random_sample)
+            else:
+                inputData = processData(parcels=parcels_)
+            if inputData != None:
+                res = inputData.loopParcelChat(system=system_info, 
+                                            prompt=prompt, 
+                                            temp=tempr, 
+                                            top_k=top_k, 
+                                            top_p=top_p, 
+                                            withSV=True,
+                                            epsg=epsg_input,
+                                            key=sv_key)
+                # convert to dataframe
+                output = pd.DataFrame(res)
+        if output is not None:
+            st.dataframe(output)
+            csv = convert_df(output)
+            # download the result as csv
+            with btn2:
+                st.download_button(label="Export result as CSV", data=csv, file_name="output.csv", mime="text/csv")
         # plot on an interactive map
         # m = folium.Map(location=[output['lat'].mean(), output['lon'].mean()], zoom_start=12)
         # for i, row in output.iterrows():
@@ -418,6 +485,7 @@ with tab_parcel_upload:
         #         popup=row['response']
         #     ).add_to(m)
         # st_folium(m)
+
 with tab_streetview:
     btn_send = st.button("process street view", 
                          key="button_send_steetview",  
