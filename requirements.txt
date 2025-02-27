@@ -4,5 +4,6 @@ ollama
 
 geopandas
 rasterio
-pillow
 segment-geospatial
+pyautogui
+pillow
