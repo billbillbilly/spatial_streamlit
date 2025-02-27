@@ -45,6 +45,8 @@ class processData:
     def getSV(self, centroid, epsg, key):
         bbox = self.projection(centroid, epsg)
         url = f"https://graph.mapillary.com/images?access_token={key}&fields=id,compass_angle,thumb_1024_url,geometry&bbox={bbox}&is_pano=true"
+        # response = None
+        # while not response or 'data' not in response:
         response = requests.get(url).json()
 
         # find the closest image
