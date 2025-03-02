@@ -3,4 +3,4 @@ source deactivate base
 conda init bash
 conda activate llmApp
 ollama pull llama3.2-vision
-streamlit run app.py
+streamlit run app/app.py
