@@ -22,7 +22,7 @@ import math
 from PIL import Image
 import sys
 
-st.header('🎈 Streamlit App for Spatial Data Analysis')
+st.header('WebUI for urban envtionment inspection')
 
 #--------------- Methods ---------------
 
@@ -304,23 +304,19 @@ def convert_df(data):
 
 parcels_, image_, output, tempr, top_k, top_p, system_info, prompt, sv_key, epsg_input = [None for i in range(10)]
 
-# parameters
-para1, para2, para3 = st.columns(3)
-with para1:
+###### sidebar ######
+with st.sidebar:
+
+    # parameters
     tempr = st.slider("temperature", 0.0, 1.0, 0.5)
-with para2:
     top_k = st.slider("top_k", 0.0, 1.0, 0.5)
-with para3:
     top_p = st.slider("top_p", 0.0, 1.0, 0.5)
 
-# prompt area
-text1, text2 = st.columns(2)
-with text1:
+    # prompt area
     system_info = st.text_area("Enter system context (optional):")
-with text2:
     prompt = st.text_area("Enter your prompt (required):")
 
-#------------------ tabs ------------------
+######## tabs ########
 tab_single_img_upload, tab_parcel_upload, tab_streetview, tab_parcel_streetview = st.tabs(
     [
         "Single Image", 
