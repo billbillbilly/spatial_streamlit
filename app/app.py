@@ -335,7 +335,7 @@ with tab_single_img_upload:
     if btn_send:
         inputData = processData(image=image_)
         if inputData != None:
-            res = inputData.oneImgChat(prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
+            res = inputData.oneImgChat(system=system_info, prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
             st.write(res)
 
 if parcels_ is not None:
@@ -358,7 +358,7 @@ if parcels_ is not None:
             else:
                 inputData = processData(parcels=parcels_)
             if inputData != None:
-                res = inputData.loopParcelChat(prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
+                res = inputData.loopParcelChat(system=system_info, prompt=prompt, temp=tempr, top_k=top_k, top_p=top_p)
                 # convert to dataframe
                 output = pd.DataFrame(res)
 

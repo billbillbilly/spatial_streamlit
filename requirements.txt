@@ -1,7 +1,7 @@
 streamlit
 streamlit_folium
 ollama
-
+numpy
 geopandas
 rasterio
 segment-geospatial

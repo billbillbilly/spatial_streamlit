@@ -1,5 +1,5 @@
 ## Build
-Please make sure conda and Ollama python is installed
+Please make sure conda and Ollama is installed
 
 ```sh
 conda create -n llmApp python==3.10

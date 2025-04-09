@@ -1,5 +1,5 @@
 #!/bin/sh
-source deactivate base
+conda deactivate base
 conda init bash
 conda activate llmApp
 ollama pull llama3.2-vision
